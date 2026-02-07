@@ -1,0 +1,12 @@
+CSA_DIR=C:\Users\ug417\.gemini\antigravity\scratch\将棋強化学習\shogidb2_dump\csa_out
+TOTAL_FILES=7652
+KEPT=7616
+SKIPPED=36
+OUTPUT_JSONL=C:\Users\ug417\.gemini\antigravity\scratch\将棋強化学習\shogidb2_dump\dataset_train.jsonl
+
+MIN_MOVES=34
+MAX_MOVES=317
+AVG_MOVES=112.78
+
+SKIPPED_BREAKDOWN:
+  SENNICHITE: 36

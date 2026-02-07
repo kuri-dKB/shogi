@@ -1,0 +1,67 @@
+--- SCRIPT 0 ---
+SRC: https://www.googletagmanager.com/gtag/js?id=G-F5D15JENSF
+
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-F5D15JENSF');
+
+
+--- SCRIPT 1 ---
+
+  (function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src='https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);})(window,document,'script','dataLayer','GTM-KJBSKCP');
+
+
+--- SCRIPT 2 ---
+SRC: https://apis.google.com/js/platform.js
+
+
+
+--- SCRIPT 3 ---
+SRC: https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js
+
+
+
+--- SCRIPT 4 ---
+
+          (adsbygoogle = window.adsbygoogle || []).push({});
+        
+
+--- SCRIPT 5 ---
+
+        (adsbygoogle = window.adsbygoogle || []).push({});
+      
+
+--- SCRIPT 6 ---
+
+        (adsbygoogle = window.adsbygoogle || []).push({});
+      
+
+--- SCRIPT 7 ---
+
+        (adsbygoogle = window.adsbygoogle || []).push({});
+      
+
+--- SCRIPT 8 ---
+
+      (adsbygoogle = window.adsbygoogle || []).push({});
+    
+
+--- SCRIPT 9 ---
+SRC: /assets/app-e20a521a86365c44972ebc473cc2e0f0.js?vsn=d
+
+  <script>
+    amzn_assoc_ad_type = "link_enhancement_widget";
+    amzn_assoc_tracking_id = "shogidb2-22";
+    amzn_assoc_linkid = "4a766ea6f5bde674348511ed3183f179";
+    amzn_assoc_placement = "";
+    amzn_assoc_marketplace = "amazon";
+    amzn_assoc_region = "JP";
+
+
+--- SCRIPT 10 ---
+SRC: //ws-fe.amazon-adsystem.com/widgets/q?ServiceVersion=20070822&Operation=GetScript&ID=OneJS&WS=1&MarketPlace=JP
+
+
+

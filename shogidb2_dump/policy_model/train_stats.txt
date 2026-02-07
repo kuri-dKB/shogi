@@ -1,0 +1,11 @@
+device=cuda
+epochs=1
+batch_size=1024
+lr=0.0001
+weight_decay=0.0001
+vocab_size=4437
+train_lines=362279
+valid_lines=2745
+start_best_valid_acc1=0.2506375217264033
+
+epoch=1 train_loss=2.1193 train_acc1=0.4601 train_acc5=0.7547 valid_loss=4.6547 valid_acc1=0.2423 valid_acc5=0.5115

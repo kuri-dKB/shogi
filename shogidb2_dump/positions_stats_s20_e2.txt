@@ -1,0 +1,17 @@
+CLEAN_JSONL=C:\Users\ug417\.gemini\antigravity\scratch\将棋強化学習\shogidb2_dump\dataset_train_clean.jsonl
+CSA_DIR=C:\Users\ug417\.gemini\antigravity\scratch\将棋強化学習\shogidb2_dump\csa_out
+TOTAL_GAMES=7611
+TRAIN_GAMES=7548
+VALID_GAMES=63
+FAIL_GAMES=0
+
+SKIP_FIRST_PLIES=20
+TAKE_EVERY=2
+MAX_POSITIONS_PER_GAME=0
+VALID_PERCENT=1
+
+TRAIN_POSITIONS=352279
+VALID_POSITIONS=2745
+
+OUT_TRAIN=C:\Users\ug417\.gemini\antigravity\scratch\将棋強化学習\shogidb2_dump\positions_train_s20_e2.jsonl
+OUT_VALID=C:\Users\ug417\.gemini\antigravity\scratch\将棋強化学習\shogidb2_dump\positions_valid_s20_e2.jsonl
