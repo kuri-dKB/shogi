@@ -365,10 +365,13 @@ def play_one_game(policy_model, value_model, vocab, game_index: int = 0):
                 device=DEVICE,
                 sfen_tensor_cache=SFEN_CACHE,
             )
-            effective_lambda = float(LAMBDA_VALUE)
-            if ply >= 120:
-                effective_lambda *= 2.0
-            mix_scores = mix_scores + effective_lambda * v_for_current
+            lambda_value = float(LAMBDA_VALUE) + VALUE_LAMBDA_ENDGAME_GAIN * max(0.0, (ply - 80) / 80.0)
+            value_pressure = 1.0
+            if ply >= 250:
+                value_pressure = 3.0
+            elif ply >= 200:
+                value_pressure = 2.5
+            mix_scores = (pol_logp.detach().cpu().numpy()) + (lambda_value * value_pressure) * v_for_current
 
         # ループ/長手数化の抑制（先後対称）
         mix_scores = mix_scores - REPEAT_NEXT_PENALTY * next_repeat_counts
