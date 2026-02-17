@@ -32,11 +32,11 @@ REPEAT_SFEN_LIMIT = 2
 RANDOM_OPENING_PLIES = 16
 
 # サンプリング温度（ループ回避で少し上げる）
-BASE_TEMPERATURE = 0.9
+BASE_TEMPERATURE = 0.7
 LOOP_TEMPERATURE = 1.6
 
 # Policyで候補を絞る数 / 最終サンプルのTopK
-TOPK_FINAL = 24
+TOPK_FINAL = 12
 TOPK_VALUE_EVAL = 32  # Value評価する候補手数（重いなら 32 でもOK）
 
 # Value の混ぜ具合
