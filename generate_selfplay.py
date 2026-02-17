@@ -32,7 +32,7 @@ REPEAT_SFEN_LIMIT = 2
 RANDOM_OPENING_PLIES = 16
 
 # サンプリング温度（ループ回避で少し上げる）
-BASE_TEMPERATURE = 0.8
+BASE_TEMPERATURE = 0.7
 LOOP_TEMPERATURE = 1.6
 
 # Policyで候補を絞る数 / 最終サンプルのTopK
@@ -40,15 +40,13 @@ TOPK_FINAL = 12
 TOPK_VALUE_EVAL = 32  # Value評価する候補手数（重いなら 32 でもOK）
 
 # Value の混ぜ具合
-LAMBDA_VALUE = 0.6   # 互換のため残す（実際の重みは ply に応じて切替）
+LAMBDA_VALUE = 0.6   # 1.0: policyとvalueを同程度に重視
 VALUE_CLIP = 1.0      # valueのtanh後をさらにクリップ（保険）
-POLICY_MIX_TAU = 30.0   # 大きいほど policy をフラット化し value が効く。
+POLICY_MIX_TAU = 8.0   # 2.0〜5.0 あたりから試す。大きいほど value が効く。
 
 # 長手数化/ループ抑制（先後対称に働く）
-LONG_GAME_START_PLY = 110
-LONG_GAME_PENALTY_PER_PLY = 0.004
+LONG_GAME_PENALTY_PER_PLY = 0.002
 REPEAT_NEXT_PENALTY = 0.8
-VALUE_LAMBDA_ENDGAME_GAIN = 0.35
 
 # 高速化（sfen->tensor の使い回し）
 SFEN_TENSOR_CACHE_MAX = 20000
@@ -280,9 +278,6 @@ def play_one_game(policy_model, value_model, vocab, game_index: int = 0):
     moves_played = []
     seen = defaultdict(int)
     stop_reason = "unknown"
-    winner = None
-    strong_win_streak = 0
-    strong_lose_streak = 0
 
     for ply in range(1, MAX_PLIES + 1):
         if board.is_game_over():
@@ -360,10 +355,9 @@ def play_one_game(policy_model, value_model, vocab, game_index: int = 0):
         next_sfens = build_next_sfens_fast(board, top_moves)
         next_repeat_counts = np.array([seen[sfen_key_no_move_number(ns)] for ns in next_sfens], dtype=np.float32)
 
-        if (not USE_VALUE) or (value_model is None):
-            v_for_current = None
-            mix_scores = pol_logp.detach().cpu().numpy()
-        else:
+        mix_scores = pol_logp.detach().cpu().numpy()
+
+        if USE_VALUE and (value_model is not None) and (ply >= 80):
             with TIMING.section("value_forward"):
                 v_for_current = eval_value_for_moves(
                 next_sfens=next_sfens,
@@ -371,28 +365,19 @@ def play_one_game(policy_model, value_model, vocab, game_index: int = 0):
                 device=DEVICE,
                 sfen_tensor_cache=SFEN_CACHE,
             )
-            if ply < 80:
-                lambda_value = 0.0
-            elif ply < 160:
-                lambda_value = 3.0
-            else:
-                lambda_value = 6.0
+            value_lambda_endgame_gain = float(globals().get("VALUE_LAMBDA_ENDGAME_GAIN", 0.0))
+            lambda_value = float(LAMBDA_VALUE) + value_lambda_endgame_gain * max(0.0, (ply - 80) / 80.0)
             mix_scores = (pol_logp.detach().cpu().numpy()) + lambda_value * v_for_current
 
         # ループ/長手数化の抑制（先後対称）
         mix_scores = mix_scores - REPEAT_NEXT_PENALTY * next_repeat_counts
-        if ply > LONG_GAME_START_PLY:
-            mix_scores = mix_scores - (ply - LONG_GAME_START_PLY) * LONG_GAME_PENALTY_PER_PLY
-
-        topk_final = 12 if ply < 80 else 6
-        base_temperature = 0.8 if ply < 80 else 0.55
+        mix_scores = mix_scores - LONG_GAME_PENALTY_PER_PLY * ply
 
         order = np.argsort(-mix_scores)
-        order = order[:max(1, min(topk_final, len(order)))]
+        order = order[:max(1, min(TOPK_FINAL, len(order)))]
 
         scores = mix_scores[order]
-        loop_temperature = min(1.0, float(LOOP_TEMPERATURE))
-        temp = loop_temperature if seen[key] >= 2 else base_temperature
+        temp = LOOP_TEMPERATURE if seen[key] >= 2 else BASE_TEMPERATURE
         scores = scores / max(1e-6, float(temp))
         probs = np.exp(scores - np.max(scores))
         probs = probs / np.sum(probs)
@@ -403,32 +388,9 @@ def play_one_game(policy_model, value_model, vocab, game_index: int = 0):
         mv_obj = top_moves[pick_idx]
         mv_usi = top_usi_abs[pick_idx]
         mv_score = float(mix_scores[pick_idx])
-        mv_value = None if v_for_current is None else float(v_for_current[pick_idx])
 
         board.push(mv_obj)
-        moves_played.append({"usi": mv_usi, "score": mv_score, "value": mv_value, "unknown_abs": unknown_abs})
-
-        if ply > RANDOM_OPENING_PLIES and mv_value is not None:
-            if mv_value >= 0.92:
-                strong_win_streak += 1
-                strong_lose_streak = 0
-            elif mv_value <= -0.92:
-                strong_lose_streak += 1
-                strong_win_streak = 0
-            else:
-                strong_win_streak = 0
-                strong_lose_streak = 0
-
-            if strong_win_streak >= 8:
-                stop_reason = "resign_win"
-                resign_side = side_to_move(board.sfen())
-                winner = resign_side
-                break
-            if strong_lose_streak >= 8:
-                stop_reason = "resign_lose"
-                resign_side = side_to_move(board.sfen())
-                winner = "w" if resign_side == "b" else "b"
-                break
+        moves_played.append({"usi": mv_usi, "score": mv_score, "unknown_abs": unknown_abs})
 
     if stop_reason == "unknown":
         stop_reason = "max_plies"
@@ -438,7 +400,6 @@ def play_one_game(policy_model, value_model, vocab, game_index: int = 0):
         "moves": moves_played,
         "plies": len(moves_played),
         "stop_reason": stop_reason,
-        "winner": winner,
     }
 
 def main():
