@@ -32,11 +32,11 @@ REPEAT_SFEN_LIMIT = 2
 RANDOM_OPENING_PLIES = 16
 
 # サンプリング温度（ループ回避で少し上げる）
-BASE_TEMPERATURE = 0.9
+BASE_TEMPERATURE = 0.7
 LOOP_TEMPERATURE = 1.6
 
 # Policyで候補を絞る数 / 最終サンプルのTopK
-TOPK_FINAL = 24
+TOPK_FINAL = 12
 TOPK_VALUE_EVAL = 32  # Value評価する候補手数（重いなら 32 でもOK）
 
 # Value の混ぜ具合
@@ -367,7 +367,8 @@ def play_one_game(policy_model, value_model, vocab, game_index: int = 0):
                 device=DEVICE,
                 sfen_tensor_cache=SFEN_CACHE,
             )
-            lambda_value = float(LAMBDA_VALUE) + VALUE_LAMBDA_ENDGAME_GAIN * max(0.0, (ply - 80) / 80.0)
+            value_lambda_endgame_gain = float(globals().get("VALUE_LAMBDA_ENDGAME_GAIN", 0.0))
+            lambda_value = float(LAMBDA_VALUE) + value_lambda_endgame_gain * max(0.0, (ply - 80) / 80.0)
             mix_scores = (pol_logp.detach().cpu().numpy()) + lambda_value * v_for_current
 
         # ループ/長手数化の抑制（先後対称）
