@@ -45,10 +45,8 @@ VALUE_CLIP = 1.0      # valueのtanh後をさらにクリップ（保険）
 POLICY_MIX_TAU = 8.0   # 2.0〜5.0 あたりから試す。大きいほど value が効く。
 
 # 長手数化/ループ抑制（先後対称に働く）
-LONG_GAME_START_PLY = 110
-LONG_GAME_PENALTY_PER_PLY = 0.004
+LONG_GAME_PENALTY_PER_PLY = 0.002
 REPEAT_NEXT_PENALTY = 0.8
-VALUE_LAMBDA_ENDGAME_GAIN = 0.35
 
 # 高速化（sfen->tensor の使い回し）
 SFEN_TENSOR_CACHE_MAX = 20000
@@ -357,9 +355,9 @@ def play_one_game(policy_model, value_model, vocab, game_index: int = 0):
         next_sfens = build_next_sfens_fast(board, top_moves)
         next_repeat_counts = np.array([seen[sfen_key_no_move_number(ns)] for ns in next_sfens], dtype=np.float32)
 
-        if (not USE_VALUE) or (value_model is None):
-            mix_scores = pol_logp.detach().cpu().numpy()
-        else:
+        mix_scores = pol_logp.detach().cpu().numpy()
+
+        if USE_VALUE and (value_model is not None) and (ply >= 80):
             with TIMING.section("value_forward"):
                 v_for_current = eval_value_for_moves(
                 next_sfens=next_sfens,
@@ -367,14 +365,23 @@ def play_one_game(policy_model, value_model, vocab, game_index: int = 0):
                 device=DEVICE,
                 sfen_tensor_cache=SFEN_CACHE,
             )
+<<<<<<< HEAD
             value_lambda_endgame_gain = float(globals().get("VALUE_LAMBDA_ENDGAME_GAIN", 0.0))
             lambda_value = float(LAMBDA_VALUE) + value_lambda_endgame_gain * max(0.0, (ply - 80) / 80.0)
             mix_scores = (pol_logp.detach().cpu().numpy()) + lambda_value * v_for_current
+=======
+            lambda_value = float(LAMBDA_VALUE) + VALUE_LAMBDA_ENDGAME_GAIN * max(0.0, (ply - 80) / 80.0)
+            value_pressure = 1.0
+            if ply >= 250:
+                value_pressure = 3.0
+            elif ply >= 200:
+                value_pressure = 2.5
+            mix_scores = (pol_logp.detach().cpu().numpy()) + (lambda_value * value_pressure) * v_for_current
+>>>>>>> main
 
         # ループ/長手数化の抑制（先後対称）
         mix_scores = mix_scores - REPEAT_NEXT_PENALTY * next_repeat_counts
-        if ply > LONG_GAME_START_PLY:
-            mix_scores = mix_scores - (ply - LONG_GAME_START_PLY) * LONG_GAME_PENALTY_PER_PLY
+        mix_scores = mix_scores - LONG_GAME_PENALTY_PER_PLY * ply
 
         order = np.argsort(-mix_scores)
         order = order[:max(1, min(TOPK_FINAL, len(order)))]
