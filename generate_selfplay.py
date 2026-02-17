@@ -2,6 +2,7 @@ import json
 import time
 from pathlib import Path
 from collections import defaultdict
+from contextlib import contextmanager
 
 import torch
 import torch.nn as nn
@@ -42,7 +43,62 @@ TOPK_VALUE_EVAL = 32  # Value評価する候補手数（重いなら 32 でもOK
 LAMBDA_VALUE = 0.6   # 1.0: policyとvalueを同程度に重視
 VALUE_CLIP = 1.0      # valueのtanh後をさらにクリップ（保険）
 POLICY_MIX_TAU = 8.0   # 2.0〜5.0 あたりから試す。大きいほど value が効く。
+
+# 長手数化/ループ抑制（先後対称に働く）
+LONG_GAME_START_PLY = 110
+LONG_GAME_PENALTY_PER_PLY = 0.004
+REPEAT_NEXT_PENALTY = 0.8
+VALUE_LAMBDA_ENDGAME_GAIN = 0.35
+
+# 高速化（sfen->tensor の使い回し）
+SFEN_TENSOR_CACHE_MAX = 20000
+
+# 軽量プロファイル（重いと感じる箇所の計測）
+ENABLE_TIMING = True
 SEED = 1234
+
+
+class Timing:
+    def __init__(self, enabled=True):
+        self.enabled = enabled
+        self.acc = defaultdict(float)
+
+    @contextmanager
+    def section(self, name: str):
+        if not self.enabled:
+            yield
+            return
+        t0 = time.perf_counter()
+        try:
+            yield
+        finally:
+            self.acc[name] += time.perf_counter() - t0
+
+
+TIMING = Timing(enabled=ENABLE_TIMING)
+
+
+class SfenTensorCache:
+    def __init__(self, max_size: int = SFEN_TENSOR_CACHE_MAX):
+        self.max_size = int(max_size)
+        self.cache = {}
+        self.hits = 0
+        self.misses = 0
+
+    def get(self, sfen: str):
+        v = self.cache.get(sfen)
+        if v is not None:
+            self.hits += 1
+            return v
+        self.misses += 1
+        v = sfen_to_tensor_self_view(sfen)
+        if len(self.cache) >= self.max_size:
+            self.cache.pop(next(iter(self.cache)))
+        self.cache[sfen] = v
+        return v
+
+
+SFEN_CACHE = SfenTensorCache()
 
 def sfen_key_no_move_number(sfen: str) -> str:
     # "<board> <turn> <hands> <move_no>" の move_no を捨てる
@@ -71,12 +127,10 @@ def build_next_sfens_fast(board: cshogi.Board, moves):
         board.pop()  # ここが重要
     return out
 
-def eval_value_for_moves(board, sfen, top_moves, value_model, device, sfen_to_tensor_self_view):
-    # 次局面を高速に作る
-    next_sfens = build_next_sfens_fast(board, top_moves)
+def eval_value_for_moves(next_sfens, value_model, device, sfen_tensor_cache):
 
     # バッチテンソル化（numpy->torch は一回）
-    xb = np.stack([sfen_to_tensor_self_view(ns) for ns in next_sfens], axis=0)
+    xb = np.stack([sfen_tensor_cache.get(ns) for ns in next_sfens], axis=0)
     xb = torch.from_numpy(xb).to(device, non_blocking=True)
 
     with torch.inference_mode():
@@ -253,10 +307,12 @@ def play_one_game(policy_model, value_model, vocab, game_index: int = 0):
         turn = side_to_move(sfen)
         is_white = (turn == "w")
 
-        x = torch.from_numpy(sfen_to_tensor_self_view(sfen)).unsqueeze(0).to(DEVICE, non_blocking=True)
-        with torch.inference_mode():
-            with torch.autocast(device_type="cuda", enabled=(DEVICE.type == "cuda"), dtype=torch.float16):
-                pol_logits = policy_model(x)[0]
+        with TIMING.section("tensorize_current"):
+            x = torch.from_numpy(SFEN_CACHE.get(sfen)).unsqueeze(0).to(DEVICE, non_blocking=True)
+        with TIMING.section("policy_forward"):
+            with torch.inference_mode():
+                with torch.autocast(device_type="cuda", enabled=(DEVICE.type == "cuda"), dtype=torch.float16):
+                    pol_logits = policy_model(x)[0]
 
         legal_list = list(board.legal_moves)
         if not legal_list:
@@ -268,16 +324,17 @@ def play_one_game(policy_model, value_model, vocab, game_index: int = 0):
         cand_usi_abs = []
         unknown_abs = 0
 
-        for mv in legal_list:
-            usi_abs = cshogi.move_to_usi(mv)
-            usi_rel = rotate_usi(usi_abs) if is_white else usi_abs
-            idx = vocab.get(usi_rel, None)
-            if idx is None:
-                unknown_abs += 1
-                continue
-            cand_moves.append(mv)
-            cand_pol_logits.append(pol_logits[idx])
-            cand_usi_abs.append(usi_abs)
+        with TIMING.section("legal_filter"):
+            for mv in legal_list:
+                usi_abs = cshogi.move_to_usi(mv)
+                usi_rel = rotate_usi(usi_abs) if is_white else usi_abs
+                idx = vocab.get(usi_rel, None)
+                if idx is None:
+                    unknown_abs += 1
+                    continue
+                cand_moves.append(mv)
+                cand_pol_logits.append(pol_logits[idx])
+                cand_usi_abs.append(usi_abs)
 
         if not cand_moves:
             mv_obj = legal_list[np.random.randint(len(legal_list))]
@@ -297,19 +354,26 @@ def play_one_game(policy_model, value_model, vocab, game_index: int = 0):
 
         pol_logp = F.log_softmax(top_pol_logits / max(1e-6, float(POLICY_MIX_TAU)), dim=0)
 
+        next_sfens = build_next_sfens_fast(board, top_moves)
+        next_repeat_counts = np.array([seen[sfen_key_no_move_number(ns)] for ns in next_sfens], dtype=np.float32)
+
         if (not USE_VALUE) or (value_model is None):
             mix_scores = pol_logp.detach().cpu().numpy()
         else:
-            v_for_current = eval_value_for_moves(
-                board=board,
-                sfen=sfen,
-                top_moves=top_moves,
+            with TIMING.section("value_forward"):
+                v_for_current = eval_value_for_moves(
+                next_sfens=next_sfens,
                 value_model=value_model,
                 device=DEVICE,
-                sfen_to_tensor_self_view=sfen_to_tensor_self_view,
+                sfen_tensor_cache=SFEN_CACHE,
             )
+            lambda_value = float(LAMBDA_VALUE) + VALUE_LAMBDA_ENDGAME_GAIN * max(0.0, (ply - 80) / 80.0)
+            mix_scores = (pol_logp.detach().cpu().numpy()) + lambda_value * v_for_current
 
-            mix_scores = (pol_logp.detach().cpu().numpy()) + float(LAMBDA_VALUE) * v_for_current
+        # ループ/長手数化の抑制（先後対称）
+        mix_scores = mix_scores - REPEAT_NEXT_PENALTY * next_repeat_counts
+        if ply > LONG_GAME_START_PLY:
+            mix_scores = mix_scores - (ply - LONG_GAME_START_PLY) * LONG_GAME_PENALTY_PER_PLY
 
         order = np.argsort(-mix_scores)
         order = order[:max(1, min(TOPK_FINAL, len(order)))]
@@ -393,6 +457,12 @@ def main():
             avg = plies_sum / i
             elapsed = time.time() - t0
             print(f"[{i}/{NUM_GAMES}] avg_plies={avg:.1f} reasons={dict(counts)} elapsed={elapsed:.1f}s")
+            if ENABLE_TIMING:
+                print(
+                    "timing:",
+                    {k: round(v, 3) for k, v in sorted(TIMING.acc.items(), key=lambda kv: -kv[1])},
+                    f"cache_hit={SFEN_CACHE.hits} cache_miss={SFEN_CACHE.misses}",
+                )
 
     print("done.")
     print("reasons:", dict(counts))
