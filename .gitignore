@@ -122,3 +122,7 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# training data / dumps
+shogidb2_dump/
+*.jsonl

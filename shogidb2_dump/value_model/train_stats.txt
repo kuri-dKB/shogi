@@ -1,9 +1,0 @@
-device=cuda
-epochs=1
-batch_size=256
-lr=0.001
-weight_decay=0.0001
-train_lines=15807
-valid_lines=159
-
-epoch=1 train_loss=0.3683 train_acc=0.8227 valid_loss=0.3402 valid_acc=0.8553

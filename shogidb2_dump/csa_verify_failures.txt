@@ -1,9 +1,0 @@
-TOTAL=7616
-OK=7611
-FAIL=5
-
-05e74de445836a73d31f767ebde11593611362c2	ValueError: illegal move at ply=76 usi=None csa_line=-0085KE sfen_before=l+R5nl/4s1gk1/6sp1/p2p1pN1p/2P1p2P1/P2P4P/KP2PP3/9/L+r5NL w B2GS4Pbgsn 76
-207f17038f2cf1b4e40687ba5fa201ba57c06e9c	ValueError: illegal move at ply=96 usi=None csa_line=-4132OU sfen_before=l2n1k2l/1r4G1p/p1n1pgs2/4sNs1P/1p1p1Pp1+B/P1P1S1G2/1P1PP4/2GK1R1p1/+bN6L w Pl3p 96
-29851763add59bfef6c1751a2a8e6f50a0ea33f2	ValueError: illegal move at ply=132 usi=None csa_line=+7776FU sfen_before=7nl/l8/p4b2p/5s1S1/3nnpbkG/1PSpp1pp1/PG3P2P/K2GP2R1/LN6L w S2Prg4p 132
-39dfb54006255813596fb469493b2d739b0cef3a	ValueError: illegal move at ply=88 usi=None csa_line=+7776FU sfen_before=l2k3nl/1s1BP2r1/2gB+P2pp/p1np1pp2/7P1/P2S2P2/1P3P2P/1SG6/LKG4NL w Prgsn3p 88
-4237b1e7079735637bcdb8826ab17dea9a1ea7fb	ValueError: illegal move at ply=128 usi=None csa_line=-1211OU sfen_before=+R4p3/5gs1k/2pp3pL/p3sgp1N/7N1/PP7/2P1L1P+n1/3+r2S2/5G1NK w BL5Pbgsl3p 128
